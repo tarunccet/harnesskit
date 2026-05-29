@@ -150,13 +150,13 @@ export class HarnessKitRuntime {
     const result = await executionCallback(context);
     const usage = readTokenUsage(result);
 
+    this.telemetry.totalTokensUsed += calculateTotalTokens(usage);
+    this.telemetry.totalCostUsd += calculateCostUsd(usage);
+
     await this.assertNoBlockedKeywords([
       { name: 'history', value: context.history },
       { name: 'result', value: result },
     ]);
-
-    this.telemetry.totalTokensUsed += calculateTotalTokens(usage);
-    this.telemetry.totalCostUsd += calculateCostUsd(usage);
 
     await this.assertBudgetWithinGuardrails();
     await this.emit('onStepComplete');
