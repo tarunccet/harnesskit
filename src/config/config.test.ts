@@ -73,4 +73,115 @@ persistence:
       ConfigManager.load('./haas.config.yaml');
     }).toThrow(/max_consecutive_loops must be a positive integer/);
   });
+
+  it('should parse preserve_first_n_messages when provided', () => {
+    const yaml = `
+version: "1.0"
+agent_id: "test-agent"
+safety_guardrails:
+  max_consecutive_loops: 5
+  max_session_cost_usd: 1.50
+  blocked_keywords: []
+context_optimization:
+  strategy: "adaptive_compaction"
+  trigger_threshold_tokens: 4000
+  preserve_system_prompt: true
+  preserve_first_n_messages: 3
+  regex_only_summarization: false
+persistence:
+  save_point: "every_step"
+  ttl_seconds: 86400
+  `;
+    vi.spyOn(fs, 'readFileSync').mockReturnValue(yaml);
+    const config = ConfigManager.load('./haas.config.yaml');
+    expect(config.context_optimization.preserve_first_n_messages).toBe(3);
+    expect(config.context_optimization.regex_only_summarization).toBe(false);
+  });
+
+  it('should default preserve_first_n_messages to 0 and regex_only_summarization to false when omitted', () => {
+    const yaml = `
+version: "1.0"
+agent_id: "test-agent"
+safety_guardrails:
+  max_consecutive_loops: 5
+  max_session_cost_usd: 1.50
+  blocked_keywords: []
+context_optimization:
+  strategy: "adaptive_compaction"
+  trigger_threshold_tokens: 4000
+  preserve_system_prompt: true
+persistence:
+  save_point: "every_step"
+  ttl_seconds: 86400
+  `;
+    vi.spyOn(fs, 'readFileSync').mockReturnValue(yaml);
+    const config = ConfigManager.load('./haas.config.yaml');
+    expect(config.context_optimization.preserve_first_n_messages).toBe(0);
+    expect(config.context_optimization.regex_only_summarization).toBe(false);
+  });
+
+  it('should parse conversational: false and default conversational to true when omitted', () => {
+    const yamlWithFalse = `
+version: "1.0"
+agent_id: "test-agent"
+conversational: false
+safety_guardrails:
+  max_consecutive_loops: 5
+  max_session_cost_usd: 1.50
+  blocked_keywords: []
+context_optimization:
+  strategy: "adaptive_compaction"
+  trigger_threshold_tokens: 4000
+  preserve_system_prompt: true
+persistence:
+  save_point: "every_step"
+  ttl_seconds: 86400
+  `;
+    vi.spyOn(fs, 'readFileSync').mockReturnValue(yamlWithFalse);
+    const config = ConfigManager.load('./haas.config.yaml');
+    expect(config.conversational).toBe(false);
+
+    const yamlWithoutField = `
+version: "1.0"
+agent_id: "test-agent"
+safety_guardrails:
+  max_consecutive_loops: 5
+  max_session_cost_usd: 1.50
+  blocked_keywords: []
+context_optimization:
+  strategy: "adaptive_compaction"
+  trigger_threshold_tokens: 4000
+  preserve_system_prompt: true
+persistence:
+  save_point: "every_step"
+  ttl_seconds: 86400
+  `;
+    vi.resetAllMocks();
+    vi.spyOn(fs, 'readFileSync').mockReturnValue(yamlWithoutField);
+    const config2 = ConfigManager.load('./haas.config.yaml');
+    expect(config2.conversational).toBe(true);
+  });
+
+  it('should throw when preserve_first_n_messages is negative', () => {
+    const yaml = `
+version: "1.0"
+agent_id: "test-agent"
+safety_guardrails:
+  max_consecutive_loops: 5
+  max_session_cost_usd: 1.50
+  blocked_keywords: []
+context_optimization:
+  strategy: "adaptive_compaction"
+  trigger_threshold_tokens: 4000
+  preserve_system_prompt: true
+  preserve_first_n_messages: -1
+persistence:
+  save_point: "every_step"
+  ttl_seconds: 86400
+  `;
+    vi.spyOn(fs, 'readFileSync').mockReturnValue(yaml);
+    expect(() => ConfigManager.load('./haas.config.yaml')).toThrow(
+      /preserve_first_n_messages must be a non-negative integer/,
+    );
+  });
 });
