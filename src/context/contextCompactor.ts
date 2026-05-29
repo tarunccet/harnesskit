@@ -1,15 +1,19 @@
 import type { ChatMessage } from '../types.js';
+import type { SummarizerFn } from '../types.js';
 
 export interface ContextCompactionOptions {
   triggerThresholdTokens: number;
   preserveSystemPrompt: boolean;
   keepRecentMessages?: number;
+  preserveFirstNMessages?: number;
+  regexOnlySummarization?: boolean;
+  summarizer?: SummarizerFn;
 }
 
 const DEFAULT_RECENT_MESSAGE_COUNT = 1;
 
 export class ContextCompactor {
-  static optimize(history: ChatMessage[], options: ContextCompactionOptions): ChatMessage[] {
+  static async optimize(history: ChatMessage[], options: ContextCompactionOptions): Promise<ChatMessage[]> {
     const activeTokenCount = estimateHistoryTokens(history);
 
     if (activeTokenCount <= options.triggerThresholdTokens) {
@@ -21,19 +25,35 @@ export class ContextCompactor {
       : -1;
     const systemPrompt = systemPromptIndex >= 0 ? history[systemPromptIndex] : null;
     const historyWithoutSystemPrompt = history.filter((_, index) => index !== systemPromptIndex);
+
+    const preserveFirstN = Math.max(0, options.preserveFirstNMessages ?? 0);
+    const firstNMessages = historyWithoutSystemPrompt.slice(0, preserveFirstN);
+    const remainingAfterFirstN = historyWithoutSystemPrompt.slice(preserveFirstN);
+
     const recentMessageCount = Math.max(1, options.keepRecentMessages ?? DEFAULT_RECENT_MESSAGE_COUNT);
-    const recentMessages = historyWithoutSystemPrompt.slice(-recentMessageCount);
-    const messagesToSummarize = historyWithoutSystemPrompt.slice(0, -recentMessageCount);
+    const recentMessages = remainingAfterFirstN.slice(-recentMessageCount);
+    const messagesToSummarize = remainingAfterFirstN.slice(0, -recentMessageCount);
+
     const compactedHistory: ChatMessage[] = [];
 
     if (systemPrompt !== null) {
       compactedHistory.push(systemPrompt);
     }
 
+    // Deduplicate: remove from firstNMessages any that overlap with recentMessages
+    const recentContents = new Set(recentMessages.map((m) => m.role + ':' + m.content));
+    const dedupedFirstN = firstNMessages.filter((m) => !recentContents.has(m.role + ':' + m.content));
+    compactedHistory.push(...dedupedFirstN);
+
     if (messagesToSummarize.length > 0) {
+      const useRegex = options.regexOnlySummarization === true || options.summarizer === undefined;
+      const summaryContent = useRegex
+        ? buildHistoricalSummary(messagesToSummarize)
+        : await options.summarizer!(messagesToSummarize);
+
       compactedHistory.push({
         role: 'system',
-        content: buildHistoricalSummary(messagesToSummarize),
+        content: summaryContent,
       });
     }
 
