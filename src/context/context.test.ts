@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import { ContextCompactor } from './contextCompactor';
 import { ChatMessage } from '../types';
 
@@ -48,5 +48,72 @@ describe('Phase 3: Adaptive Context Compaction Engine Tests', () => {
     expect(optimizedResult[0].content).toContain('SYSTEM_PROMPT: CORE_LOGIC_DO_NOT_ERASE');
     expect(optimizedResult[1].role).toBe('system'); // Injected summary role block
     expect(optimizedResult[1].content).toContain('### Historical Execution Summary');
+  });
+
+  it('should preserve first N messages verbatim alongside the summary when preserveFirstNMessages is set', async () => {
+    const history: ChatMessage[] = [
+      { role: 'system', content: 'You are a compliance reviewer.' },
+      { role: 'user', content: 'Initial goal: review vendor payout.' },
+      { role: 'assistant', content: 'Step 1 complete.' },
+      { role: 'user', content: 'Step 2: check fraud flags.' },
+      { role: 'assistant', content: 'Step 2 complete.' },
+      { role: 'user', content: 'Final step.' },
+    ];
+
+    const result = await ContextCompactor.optimize(history, {
+      triggerThresholdTokens: 5,
+      preserveSystemPrompt: true,
+      preserveFirstNMessages: 1,
+    });
+
+    // system prompt at index 0
+    expect(result[0].content).toBe('You are a compliance reviewer.');
+    // first preserved message at index 1
+    expect(result[1].content).toBe('Initial goal: review vendor payout.');
+    // summary blob should follow
+    const summaryMessage = result.find((m) => m.content.includes('### Historical Execution Summary'));
+    expect(summaryMessage).toBeDefined();
+  });
+
+  it('should use regex summarization when regexOnlySummarization is true even if summarizer is provided', async () => {
+    const history: ChatMessage[] = [
+      { role: 'user', content: 'step one very long message that definitely exceeds threshold' },
+      { role: 'assistant', content: 'step two very long response that also exceeds threshold' },
+      { role: 'user', content: 'final step' },
+    ];
+
+    const fakeSummarizer = vi.fn(async () => 'LLM SUMMARY');
+
+    const result = await ContextCompactor.optimize(history, {
+      triggerThresholdTokens: 5,
+      preserveSystemPrompt: false,
+      regexOnlySummarization: true,
+      summarizer: fakeSummarizer,
+    });
+
+    expect(fakeSummarizer).not.toHaveBeenCalled();
+    const summaryMessage = result.find((m) => m.content.includes('### Historical Execution Summary'));
+    expect(summaryMessage).toBeDefined();
+  });
+
+  it('should call the summarizer callback and use its return value when provided and regexOnlySummarization is false', async () => {
+    const history: ChatMessage[] = [
+      { role: 'user', content: 'step one very long message that definitely exceeds threshold' },
+      { role: 'assistant', content: 'step two very long response that also exceeds threshold' },
+      { role: 'user', content: 'final step' },
+    ];
+
+    const fakeSummarizer = vi.fn(async (_messages: ChatMessage[]) => 'CUSTOM LLM SUMMARY');
+
+    const result = await ContextCompactor.optimize(history, {
+      triggerThresholdTokens: 5,
+      preserveSystemPrompt: false,
+      regexOnlySummarization: false,
+      summarizer: fakeSummarizer,
+    });
+
+    expect(fakeSummarizer).toHaveBeenCalledOnce();
+    const summaryMessage = result.find((m) => m.content === 'CUSTOM LLM SUMMARY');
+    expect(summaryMessage).toBeDefined();
   });
 });
