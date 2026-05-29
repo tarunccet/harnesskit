@@ -1,5 +1,6 @@
 version: "1.0"
 agent_id: "harnesskit-local-agent"
+conversational: true
 safety_guardrails:
   max_consecutive_loops: 5
   max_session_cost_usd: 1.50
@@ -8,6 +9,8 @@ context_optimization:
   strategy: "adaptive_compaction"
   trigger_threshold_tokens: 4000
   preserve_system_prompt: true
+  preserve_first_n_messages: 0
+  regex_only_summarization: false
 persistence:
   save_point: "every_step"
   ttl_seconds: 86400

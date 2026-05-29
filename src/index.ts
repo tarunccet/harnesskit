@@ -22,5 +22,6 @@ export type {
   RuntimeEventName,
   RuntimeEventPayload,
   RuntimeTelemetry,
+  SummarizerFn,
   TokenUsageReport,
 } from './types.js';
