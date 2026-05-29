@@ -1,0 +1,9 @@
+# Cursor Rules
+
+HarnessKit is a FOSS-first TypeScript runtime layer for production AI agents.
+
+- Keep the core engine framework-agnostic and provider-neutral.
+- Do not add runtime dependencies unless they are explicitly approved or already part of the project plan.
+- Preserve the `IStateStore` abstraction; database-specific logic must stay behind adapters.
+- Enforce every field promised by `haas.config.yaml`; parsed config that is not enforced is a broken product contract.
+- Run `npm run check` before marking implementation work complete.

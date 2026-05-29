@@ -1,0 +1,14 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
+    "noEmit": true,
+    "rootDir": ".",
+    "paths": {
+      "harnesskit": ["./src/index.ts"]
+    }
+  },
+  "include": ["src/**/*.ts", "examples/**/*.ts"],
+  "exclude": ["dist", "node_modules"]
+}

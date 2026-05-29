@@ -1,0 +1,60 @@
+{
+  "name": "harnesskit",
+  "version": "0.1.0",
+  "description": "Provider-neutral runtime safety layer for durable AI agent sessions, context compaction, and guardrails.",
+  "license": "MIT",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "sideEffects": false,
+  "engines": {
+    "node": ">=20"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/tanarang/harnesskit.git"
+  },
+  "bugs": {
+    "url": "https://github.com/tanarang/harnesskit/issues"
+  },
+  "homepage": "https://github.com/tanarang/harnesskit#readme",
+  "keywords": [
+    "ai-agents",
+    "agent-runtime",
+    "llm",
+    "guardrails",
+    "context-compaction",
+    "redis",
+    "typescript"
+  ],
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist",
+    "examples",
+    "README.md",
+    "LICENSE",
+    "haas.config.yaml"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "smoke:dist": "node --input-type=module -e \"await import('./dist/index.js')\"",
+    "typecheck": "tsc --noEmit -p tsconfig.test.json",
+    "test": "vitest run",
+    "test:redis": "HARNESSKIT_REDIS_INTEGRATION=1 vitest run src/state/redis.test.ts",
+    "check": "npm run typecheck && npm test && npm run build && npm run smoke:dist",
+    "prepublishOnly": "npm run check"
+  },
+  "devDependencies": {
+    "@types/node": "^25.9.1",
+    "typescript": "^6.0.3",
+    "vitest": "^4.1.7"
+  },
+  "dependencies": {
+    "ioredis": "^5.11.0"
+  }
+}
