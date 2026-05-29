@@ -3,6 +3,7 @@ import * as fs from 'fs';
 export interface HarnessKitConfig {
   version: string;
   agent_id: string;
+  conversational: boolean;
   safety_guardrails: SafetyGuardrailsConfig;
   context_optimization: ContextOptimizationConfig;
   persistence: PersistenceConfig;
@@ -18,6 +19,8 @@ export interface ContextOptimizationConfig {
   strategy: 'adaptive_compaction';
   trigger_threshold_tokens: number;
   preserve_system_prompt: boolean;
+  preserve_first_n_messages: number;
+  regex_only_summarization: boolean;
 }
 
 export interface PersistenceConfig {
@@ -194,14 +197,39 @@ function isQuoted(value: string): boolean {
   );
 }
 
+function optionalBoolean(config: ParsedYaml, key: string, defaultValue: boolean): boolean {
+  const value = config[key];
+  if (value === undefined) return defaultValue;
+  if (typeof value !== 'boolean') throw new Error(MALFORMED_CONFIG_ERROR);
+  return value;
+}
+
+function optionalNonNegativeInteger(config: ParsedYaml, key: string, defaultValue: number): number {
+  const value = config[key];
+  if (value === undefined) return defaultValue;
+  if (typeof value !== 'number' || !Number.isInteger(value) || value < 0) {
+    throw new Error(`${key} must be a non-negative integer`);
+  }
+  return value;
+}
+
 function validateConfig(config: ParsedYaml): HarnessKitConfig {
   const safetyGuardrails = requireSection(config, 'safety_guardrails');
   const contextOptimization = requireSection(config, 'context_optimization');
   const persistence = requireSection(config, 'persistence');
 
+  const conversational = optionalBoolean(config, 'conversational', true);
+
+  if (!conversational && config['context_optimization'] !== undefined) {
+    console.warn(
+      '[HarnessKit] Warning: context_optimization is ignored when conversational is false',
+    );
+  }
+
   const validatedConfig: HarnessKitConfig = {
     version: requireString(config, 'version'),
     agent_id: requireString(config, 'agent_id'),
+    conversational,
     safety_guardrails: {
       max_consecutive_loops: requireNumber(safetyGuardrails, 'max_consecutive_loops'),
       max_session_cost_usd: requireNumber(safetyGuardrails, 'max_session_cost_usd'),
@@ -216,6 +244,16 @@ function validateConfig(config: ParsedYaml): HarnessKitConfig {
       ),
       trigger_threshold_tokens: requireNumber(contextOptimization, 'trigger_threshold_tokens'),
       preserve_system_prompt: requireBoolean(contextOptimization, 'preserve_system_prompt'),
+      preserve_first_n_messages: optionalNonNegativeInteger(
+        contextOptimization,
+        'preserve_first_n_messages',
+        0,
+      ),
+      regex_only_summarization: optionalBoolean(
+        contextOptimization,
+        'regex_only_summarization',
+        false,
+      ),
     },
     persistence: {
       save_point: requireLiteral(

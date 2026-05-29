@@ -1,5 +1,7 @@
 import type { HarnessKitConfig } from './config/configManager.js';
 
+export type SummarizerFn = (messagesToCompress: ChatMessage[]) => Promise<string>;
+
 export type ChatRole = 'system' | 'user' | 'assistant' | 'tool';
 
 export interface ChatMessage {
