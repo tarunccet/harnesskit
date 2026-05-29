@@ -204,27 +204,34 @@ function optionalBoolean(config: ParsedYaml, key: string, defaultValue: boolean)
   return value;
 }
 
-function optionalNonNegativeInteger(config: ParsedYaml, key: string, defaultValue: number): number {
+function optionalNonNegativeInteger(config: ParsedYaml, key: string, defaultValue: number, errorMessage: string): number {
   const value = config[key];
   if (value === undefined) return defaultValue;
   if (typeof value !== 'number' || !Number.isInteger(value) || value < 0) {
-    throw new Error(`${key} must be a non-negative integer`);
+    throw new Error(errorMessage);
   }
   return value;
 }
 
 function validateConfig(config: ParsedYaml): HarnessKitConfig {
   const safetyGuardrails = requireSection(config, 'safety_guardrails');
-  const contextOptimization = requireSection(config, 'context_optimization');
   const persistence = requireSection(config, 'persistence');
 
   const conversational = optionalBoolean(config, 'conversational', true);
 
-  if (!conversational && config['context_optimization'] !== undefined) {
+  const contextOptimizationRaw = config['context_optimization'];
+  if (conversational && !isPlainRecord(contextOptimizationRaw)) {
+    throw new Error(MALFORMED_CONFIG_ERROR);
+  }
+  if (!conversational && contextOptimizationRaw !== undefined) {
     console.warn(
       '[HarnessKit] Warning: context_optimization is ignored when conversational is false',
     );
   }
+
+  const contextOptimization: Record<string, unknown> = isPlainRecord(contextOptimizationRaw)
+    ? contextOptimizationRaw
+    : {};
 
   const validatedConfig: HarnessKitConfig = {
     version: requireString(config, 'version'),
@@ -236,18 +243,25 @@ function validateConfig(config: ParsedYaml): HarnessKitConfig {
       blocked_keywords: requireStringArray(safetyGuardrails, 'blocked_keywords'),
     },
     context_optimization: {
-      strategy: requireLiteral(
-        contextOptimization,
-        'strategy',
-        'adaptive_compaction',
-        'context_optimization.strategy must be adaptive_compaction',
-      ),
-      trigger_threshold_tokens: requireNumber(contextOptimization, 'trigger_threshold_tokens'),
-      preserve_system_prompt: requireBoolean(contextOptimization, 'preserve_system_prompt'),
+      strategy: conversational
+        ? requireLiteral(
+            contextOptimization,
+            'strategy',
+            'adaptive_compaction',
+            'context_optimization.strategy must be adaptive_compaction',
+          )
+        : 'adaptive_compaction',
+      trigger_threshold_tokens: conversational
+        ? requireNumber(contextOptimization, 'trigger_threshold_tokens')
+        : 0,
+      preserve_system_prompt: conversational
+        ? requireBoolean(contextOptimization, 'preserve_system_prompt')
+        : false,
       preserve_first_n_messages: optionalNonNegativeInteger(
         contextOptimization,
         'preserve_first_n_messages',
         0,
+        'preserve_first_n_messages must be a non-negative integer',
       ),
       regex_only_summarization: optionalBoolean(
         contextOptimization,
@@ -274,10 +288,12 @@ function validateConfig(config: ParsedYaml): HarnessKitConfig {
     validatedConfig.safety_guardrails.max_session_cost_usd,
     'max_session_cost_usd must be a positive number',
   );
-  assertPositiveInteger(
-    validatedConfig.context_optimization.trigger_threshold_tokens,
-    'trigger_threshold_tokens must be a positive integer',
-  );
+  if (conversational) {
+    assertPositiveInteger(
+      validatedConfig.context_optimization.trigger_threshold_tokens,
+      'trigger_threshold_tokens must be a positive integer',
+    );
+  }
   assertPositiveInteger(
     validatedConfig.persistence.ttl_seconds,
     'ttl_seconds must be a positive integer',
