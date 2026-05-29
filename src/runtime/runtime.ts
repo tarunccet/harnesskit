@@ -80,7 +80,13 @@ export class HarnessKitRuntime {
     return ContextCompactor.optimize(this.history, {
       triggerThresholdTokens: this.activeConfig.context_optimization.trigger_threshold_tokens,
       preserveSystemPrompt: this.activeConfig.context_optimization.preserve_system_prompt,
+      preserveFirstNMessages: this.activeConfig.context_optimization.preserve_first_n_messages,
+      regexOnlySummarization: this.activeConfig.context_optimization.regex_only_summarization,
     });
+  }
+
+  getTelemetry(): RuntimeTelemetry {
+    return structuredClone(this.telemetry);
   }
 
   async runLoop<TResult>(
@@ -117,6 +123,41 @@ export class HarnessKitRuntime {
     this.telemetry.totalCostUsd += calculateCostUsd(usage);
 
     await this.persistState();
+    await this.assertBudgetWithinGuardrails();
+    await this.emit('onStepComplete');
+
+    return result;
+  }
+
+  async runOnce<TResult>(
+    executionCallback: (context: ExecutionContext) => Promise<TResult>,
+  ): Promise<TResult> {
+    await this.assertBudgetWithinGuardrails();
+
+    const context: ExecutionContext = {
+      sessionId: this.sessionId,
+      tenantId: this.tenantId,
+      currentStep: this.currentStep,
+      activeConfig: this.activeConfig,
+      history: [],
+      variables: structuredClone(this.variables),
+      telemetry: structuredClone(this.telemetry),
+    };
+
+    await this.assertNoBlockedKeywords([{ name: 'variables', value: context.variables }]);
+    await this.emit('onStepStart');
+
+    const result = await executionCallback(context);
+    const usage = readTokenUsage(result);
+
+    await this.assertNoBlockedKeywords([
+      { name: 'history', value: context.history },
+      { name: 'result', value: result },
+    ]);
+
+    this.telemetry.totalTokensUsed += calculateTotalTokens(usage);
+    this.telemetry.totalCostUsd += calculateCostUsd(usage);
+
     await this.assertBudgetWithinGuardrails();
     await this.emit('onStepComplete');
 
